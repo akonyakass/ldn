@@ -1,0 +1,17 @@
+content_category,post_count,total_engagement,median_engagement,mean_engagement,median_eng_rate_tier1,top_platform
+meme_humor,66,4177577,2697.0,63296.621212121216,0.029614,youtube
+opinion_discussion,14,43785,2175.0,3127.5,0.029599,youtube
+workflow_use_case,29,85289,959.0,2941.0,0.023164,youtube
+claude_code_agentic,517,1300618,948.0,2515.7021276595747,0.025624,youtube
+experience_story,7,18907,896.0,2701.0,0.030721,youtube
+prompt_engineering,17,50586,792.0,2975.6470588235293,0.017322,reddit
+tutorial_how_to,186,492170,782.5,2646.0752688172042,0.023414,youtube
+other,566,10912828,750.5,19280.614840989398,0.0256885,youtube
+creator_demo,28,187702,609.5,6703.642857142857,0.02208,youtube
+news_announcement,63,587044,314.0,9318.15873015873,0.024737000000000002,youtube
+tool_comparison,17,12108,201.0,712.2352941176471,0.01655,youtube
+comparison_vs_chatgpt,271,811330,198.0,2993.837638376384,0.02172,youtube
+safety_controversy,1,144,144.0,144.0,,reddit
+earn_money_business,12,6072,114.0,506.0,0.0140325,youtube
+product_review,43,40073,84.0,931.9302325581396,0.017391,youtube
+benchmark_claim,72,32108,11.5,445.94444444444446,0.0217085,youtube
