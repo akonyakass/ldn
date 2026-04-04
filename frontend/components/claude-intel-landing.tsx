@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
+import { PostsByDayChart, type DayPostPoint } from "@/components/posts-by-day-chart";
 
 type Meta = {
   row_count: number;
   dataset_mtime: number | null;
   platforms: string[];
+  posts_by_day_7d?: DayPostPoint[];
   error?: string;
 };
 
@@ -31,72 +33,8 @@ function formatCategoryLabel(raw: string): string {
     .join(" ");
 }
 
-const PIPELINE = [
-  {
-    title: "Collect",
-    desc: "Run public parsers across X, YouTube, Reddit, TikTok, and Threads.",
-  },
-  {
-    title: "Store",
-    desc: "Save raw JSON snapshots for reproducibility.",
-  },
-  {
-    title: "Normalize",
-    desc: "Map source-specific fields into one schema.",
-  },
-  {
-    title: "Enrich",
-    desc: "Assign content bucket, theme, creator type.",
-  },
-  {
-    title: "Analyze",
-    desc: "Compute trends, spikes, creator rankings.",
-  },
-  {
-    title: "Output",
-    desc: "Generate charts, tables, and weekly brief.",
-  },
-];
-
-const CARDS = [
-  "Comparison framing",
-  "Tutorial loops",
-  "Creator amplification",
-  "Narrative spikes",
-  "Cross-platform spread",
-  "Weekly counter-playbook",
-];
-
-const PLAYBOOK = [
-  {
-    signal: "Comparison posts generate the most discussion volume",
-    action:
-      "Launch features with explicit head-to-head framing against incumbent tools.",
-    channel: "X",
-    metric: "Comments / repost rate",
-  },
-  {
-    signal: "Tutorial videos sustain stronger engagement than hot takes",
-    action:
-      "Seed creator walkthroughs with jobs-to-be-done examples and concrete demos.",
-    channel: "YouTube",
-    metric: "Views / watch-through",
-  },
-  {
-    signal: "Creator-led distribution outperforms official brand posting",
-    action:
-      "Create an early-access creator program with repeatable prompts and demo assets.",
-    channel: "X + YouTube",
-    metric: "Earned mentions",
-  },
-  {
-    signal: "Workflow narratives recur across multiple platforms",
-    action:
-      "Package features as workflows and templates instead of raw specs.",
-    channel: "All",
-    metric: "Signup CTR",
-  },
-];
+/** Catch-all buckets excluded so Top themes matches detailed chart categories. */
+const TOP_THEME_EXCLUDE = new Set(["other", "unknown"]);
 
 const NARRATIVE_LABEL: Record<string, string> = {
   coding_use_case: "Coding use case",
@@ -209,7 +147,14 @@ export function ClaudeIntelLanding() {
 
   const themes = useMemo(() => {
     const rows = [...categoryRows]
-      .filter((r) => r.content_category && r.post_count != null)
+      .filter((r) => {
+        const cat = String(r.content_category ?? "").toLowerCase();
+        return (
+          r.content_category &&
+          r.post_count != null &&
+          !TOP_THEME_EXCLUDE.has(cat)
+        );
+      })
       .sort(
         (a, b) =>
           Number(b.post_count) - Number(a.post_count)
@@ -241,38 +186,10 @@ export function ClaudeIntelLanding() {
             : idx === 1
               ? "Cross-platform"
               : "Volume signal",
-        text: `${label}: ${count.toLocaleString()} posts in dataset (see Tables for breakdown).`,
+        text: `${label}: ${count.toLocaleString()} posts in dataset (see Charts for breakdown).`,
       };
     });
   }, [narrativeRows]);
-
-  const barChart = useMemo(() => {
-    const rows = categoryRows.length
-      ? [...categoryRows]
-          .sort(
-            (a, b) =>
-              Number(b.post_count) - Number(a.post_count)
-          )
-          .slice(0, 7)
-      : [];
-    const vol = rows.length
-      ? rows.map((r) => Number(r.post_count))
-      : [180, 240, 225, 310, 420, 365, 510];
-    const max = Math.max(...vol, 1);
-    const heights = vol.map((v) => Math.max(18, (v / max) * 200));
-    const labels = rows.length
-      ? rows.map((r) => {
-          const raw = String(r.content_category ?? "");
-          const words = raw.split("_");
-          const abbr =
-            words.length > 1
-              ? words.map((w) => w[0]).join("").slice(0, 4)
-              : raw.slice(0, 4);
-          return abbr.toUpperCase();
-        })
-      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    return { heights, labels, rows };
-  }, [categoryRows]);
 
   const creatorsDisplay =
     topAuthors.length > 0
@@ -314,8 +231,7 @@ export function ClaudeIntelLanding() {
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/60 md:text-lg">
               A weekly intelligence surface that tracks Claude discourse, surfaces
-              platform mix and themes, ranks amplifying handles, and pairs signals
-              with a competitor counter-playbook.
+              platform mix and themes, and ranks amplifying handles.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a
@@ -324,21 +240,45 @@ export function ClaudeIntelLanding() {
               >
                 View weekly signals
               </a>
-              <a
-                href="#architecture"
-                className="rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-medium text-white backdrop-blur-xl transition hover:bg-white/10"
-              >
-                See the machine
-              </a>
               <Link
                 href="/explorer"
                 className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/80 transition hover:bg-white/10"
               >
                 Data explorer
               </Link>
+              <Link
+                href="/charts"
+                className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/80 transition hover:bg-white/10"
+              >
+                Charts
+              </Link>
             </div>
           </div>
         </section>
+
+        {!err && (
+          <section
+            aria-label="Post volume over the last seven days"
+            className="mx-auto max-w-7xl px-6 pb-8"
+          >
+            <div className="rounded-[36px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-2xl md:p-8">
+              <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                <h2 className="text-xl font-medium tracking-tight md:text-2xl">
+                  Claude-related posts by day
+                </h2>
+                <span className="text-sm text-white/40">7-day window</span>
+              </div>
+              <p className="mb-6 text-sm text-white/45">
+                Post counts by publish date (UTC), ending on the latest day in
+                the dataset.
+              </p>
+              <PostsByDayChart
+                points={meta?.posts_by_day_7d ?? []}
+                loading={meta === null}
+              />
+            </div>
+          </section>
+        )}
 
         {err && (
           <div className="mx-auto max-w-7xl px-6 pb-4">
@@ -349,19 +289,6 @@ export function ClaudeIntelLanding() {
             </p>
           </div>
         )}
-
-        <section className="mx-auto max-w-7xl px-6 pb-6">
-          <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">
-            {CARDS.map((card) => (
-              <div
-                key={card}
-                className="min-w-[220px] rounded-[28px] border border-white/10 bg-white/[0.06] px-5 py-4 text-sm text-white/80 backdrop-blur-2xl"
-              >
-                {card}
-              </div>
-            ))}
-          </div>
-        </section>
 
         <section className="mx-auto max-w-7xl px-6 py-8">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -397,32 +324,6 @@ export function ClaudeIntelLanding() {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="rounded-[36px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-2xl lg:col-span-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-medium">Category volume (top 7)</h3>
-                <span className="text-sm text-white/40">By post count</span>
-              </div>
-              <div className="mt-8 flex h-80 items-end gap-3 rounded-[28px] border border-white/10 bg-black/30 p-5">
-                {barChart.heights.map((h, i) => (
-                  <div
-                    key={`${barChart.labels[i]}-${i}`}
-                    className="flex min-w-0 flex-1 flex-col items-center justify-end gap-3"
-                  >
-                    <div
-                      className="w-full rounded-t-[20px] bg-gradient-to-t from-white/90 via-white/60 to-white/20"
-                      style={{ height: `${h}px` }}
-                    />
-                    <span
-                      className="max-w-full truncate text-[10px] uppercase tracking-[0.15em] text-white/35"
-                      title={String(barChart.rows[i]?.content_category ?? "")}
-                    >
-                      {barChart.labels[i]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[36px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-2xl">
               <h3 className="text-xl font-medium">Top themes</h3>
               <div className="mt-6 space-y-5">
                 {(themes.length ? themes : [{ name: "Loading…", pct: 0 }]).map(
@@ -491,92 +392,6 @@ export function ClaudeIntelLanding() {
                 ))}
               </div>
             </div>
-          </div>
-        </section>
-
-        <section id="architecture" className="mx-auto max-w-7xl px-6 py-16">
-          <div className="mb-8">
-            <div className="text-xs uppercase tracking-[0.28em] text-white/45">
-              The machine
-            </div>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] md:text-5xl">
-              How the platform updates
-            </h2>
-            <p className="mt-4 max-w-3xl text-white/55">
-              Run collectors, store raw JSON, normalize into one schema, enrich,
-              then regenerate tables and charts the dashboard reads. Use{" "}
-              <strong className="text-white/80">Refresh (dry-run)</strong> in the
-              header to rebuild from cache.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <div className="flex min-w-[1100px] items-stretch gap-4">
-              {PIPELINE.map((step, idx) => (
-                <div key={step.title} className="flex items-center gap-4">
-                  <div className="w-60 rounded-[32px] border border-white/10 bg-white/[0.06] p-5 backdrop-blur-2xl">
-                    <div className="text-xs uppercase tracking-[0.22em] text-white/35">
-                      Step {idx + 1}
-                    </div>
-                    <div className="mt-3 text-2xl font-medium tracking-[-0.03em]">
-                      {step.title}
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-white/55">
-                      {step.desc}
-                    </p>
-                  </div>
-                  {idx !== PIPELINE.length - 1 && (
-                    <div className="text-2xl text-white/25">→</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="playbook" className="mx-auto max-w-7xl px-6 py-16">
-          <div className="mb-8">
-            <div className="text-xs uppercase tracking-[0.28em] text-white/45">
-              Counter-playbook
-            </div>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] md:text-5xl">
-              How a competitor copies the mechanics
-            </h2>
-          </div>
-
-          <div className="overflow-hidden rounded-[36px] border border-white/10 bg-white/[0.06] backdrop-blur-2xl">
-            <div className="grid grid-cols-1 gap-2 border-b border-white/10 px-6 py-4 text-xs uppercase tracking-[0.22em] text-white/40 sm:grid-cols-4">
-              <div>Observed signal</div>
-              <div>Recommended action</div>
-              <div>Channel</div>
-              <div>Metric</div>
-            </div>
-            {PLAYBOOK.map((row) => (
-              <div
-                key={row.signal}
-                className="grid grid-cols-1 gap-4 border-b border-white/10 px-6 py-6 text-sm last:border-none sm:grid-cols-4"
-              >
-                <div className="pr-4 text-white/80">{row.signal}</div>
-                <div className="pr-4 text-white/60">{row.action}</div>
-                <div className="pr-4 text-white/55">{row.channel}</div>
-                <div className="text-white/40">{row.metric}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-10 flex flex-wrap gap-4">
-            <Link
-              href="/tables"
-              className="rounded-full border border-white/15 bg-white/5 px-5 py-2.5 text-sm text-white/80 transition hover:bg-white/10"
-            >
-              Open summary tables
-            </Link>
-            <Link
-              href="/charts"
-              className="rounded-full border border-white/15 bg-white/5 px-5 py-2.5 text-sm text-white/80 transition hover:bg-white/10"
-            >
-              View chart exports
-            </Link>
           </div>
         </section>
       </main>

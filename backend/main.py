@@ -176,6 +176,35 @@ def _df_records(df: pd.DataFrame | None) -> list[dict[str, Any]]:
     return json.loads(df.to_json(orient="records", date_format="iso"))
 
 
+_WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _posts_by_day_last_7(df: pd.DataFrame) -> list[dict[str, Any]]:
+    """Seven calendar days ending on the latest publish day in the dataset (UTC)."""
+    if "published_at" not in df.columns or df.empty:
+        return []
+    ts = pd.to_datetime(df["published_at"], errors="coerce", utc=True)
+    days = ts.dt.normalize()
+    days = days.dropna()
+    if days.empty:
+        return []
+    end = days.max()
+    start = end - pd.Timedelta(days=6)
+    rng = pd.date_range(start=start, end=end, freq="D", tz="UTC")
+    vc = days.value_counts()
+    out: list[dict[str, Any]] = []
+    for d in rng:
+        c = int(vc.get(d, 0))
+        out.append(
+            {
+                "iso_date": d.strftime("%Y-%m-%d"),
+                "weekday": _WEEKDAY_SHORT[int(d.dayofweek)],
+                "count": c,
+            }
+        )
+    return out
+
+
 app = FastAPI(title="LDN Growth Intel API", version="1.0.0")
 
 _cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(
@@ -203,6 +232,7 @@ def meta() -> dict:
             "dataset_path": str(DATASET_PATH),
             "dataset_mtime": None,
             "platforms": [],
+            "posts_by_day_7d": [],
             "error": "dataset_missing",
         }
     st = DATASET_PATH.stat()
@@ -213,6 +243,7 @@ def meta() -> dict:
         "dataset_path": str(DATASET_PATH),
         "dataset_mtime": st.st_mtime,
         "platforms": platforms,
+        "posts_by_day_7d": _posts_by_day_last_7(df),
     }
 
 

@@ -84,12 +84,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <a href={hash("signals")} className="hover:text-white">
                 Signals
               </a>
-              <a href={hash("architecture")} className="hover:text-white">
-                Machine
-              </a>
-              <a href={hash("playbook")} className="hover:text-white">
-                Playbook
-              </a>
               <span className="text-white/25">|</span>
               <Link
                 href="/explorer"
@@ -100,16 +94,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 }
               >
                 Explorer
-              </Link>
-              <Link
-                href="/tables"
-                className={
-                  pathname.startsWith("/tables")
-                    ? "text-white"
-                    : "hover:text-white"
-                }
-              >
-                Tables
               </Link>
               <Link
                 href="/charts"

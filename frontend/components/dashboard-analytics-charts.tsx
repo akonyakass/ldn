@@ -411,7 +411,7 @@ export function DashboardAnalyticsCharts({
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Posts"]}
             />
-            <Bar dataKey="value" fill={ACCENT_BARS[4]} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="value" fill="#E9FE87" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -437,7 +437,7 @@ export function DashboardAnalyticsCharts({
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Count"]}
             />
-            <Bar dataKey="value" fill={ACCENT_BARS[5]} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="value" fill="#E9FE87" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -553,7 +553,7 @@ export function DashboardAnalyticsCharts({
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Median engagement"]}
             />
-            <Bar dataKey="value" fill="#f472b6" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="value" fill="#E9FE87" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
