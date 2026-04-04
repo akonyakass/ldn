@@ -1,0 +1,16 @@
+phase,content_category,count,pct
+Pre-Launch,other,4,50.0
+Pre-Launch,off_topic,2,25.0
+Pre-Launch,comparison_vs_chatgpt,1,12.5
+Pre-Launch,meme_humor,1,12.5
+Launch Spike,claude_features,10,83.3
+Launch Spike,other,1,8.3
+Launch Spike,tutorial_how_to,1,8.3
+Amplification,claude_features,10,71.4
+Amplification,comparison_vs_chatgpt,2,14.3
+Amplification,other,2,14.3
+Sustained,claude_features,13,43.3
+Sustained,other,10,33.3
+Sustained,comparison_vs_chatgpt,5,16.7
+Sustained,news_announcement,1,3.3
+Sustained,off_topic,1,3.3

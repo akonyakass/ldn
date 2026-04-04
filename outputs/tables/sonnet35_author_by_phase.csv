@@ -1,0 +1,13 @@
+phase,author_type,count,pct
+Pre-Launch,unknown,7,87.5
+Pre-Launch,creator_blogger,1,12.5
+Launch Spike,creator_blogger,5,41.7
+Launch Spike,unknown,5,41.7
+Launch Spike,company,1,8.3
+Launch Spike,developer,1,8.3
+Amplification,unknown,8,57.1
+Amplification,creator_blogger,4,28.6
+Amplification,developer,2,14.3
+Sustained,unknown,15,50.0
+Sustained,creator_blogger,12,40.0
+Sustained,developer,3,10.0
