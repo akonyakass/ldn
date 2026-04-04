@@ -32,6 +32,15 @@ MODEL_QUERIES = [
     "Claude Sonnet",
     "Claude Opus",
     "Claude Haiku",
+    # ── Opus 4.6 release (February 2026) ──────────────────────────────────────
+    "Claude Opus 4.6",
+    "Claude Opus 4",
+    "Claude 4.6",
+    "SWE-bench Claude",
+    "ARC-AGI Claude",
+    "Anthropic most capable model",
+    "Claude 80.8",
+    "Claude new model 2026",
 ]
 
 # ── Competitive / comparison queries ──────────────────────────────────────────
