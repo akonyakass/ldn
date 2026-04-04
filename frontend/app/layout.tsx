@@ -15,8 +15,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "LDN Growth Intel",
-  description: "Claude viral growth playbook — discourse intelligence",
+  title: "ClaudeIntel — Growth Intelligence Engine",
+  description:
+    "Reverse-engineering Claude's viral growth — discourse intelligence for growth teams",
 };
 
 export default function RootLayout({
