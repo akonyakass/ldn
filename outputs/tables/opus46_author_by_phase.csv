@@ -1,0 +1,21 @@
+phase,author_type,count,pct
+Pre-Launch,unknown,63,36.0
+Pre-Launch,creator_blogger,61,34.9
+Pre-Launch,developer,36,20.6
+Pre-Launch,community_user,14,8.0
+Pre-Launch,company,1,0.6
+Launch Spike,unknown,20,38.5
+Launch Spike,creator_blogger,17,32.7
+Launch Spike,developer,11,21.2
+Launch Spike,community_user,3,5.8
+Launch Spike,company,1,1.9
+Amplification,unknown,45,41.7
+Amplification,creator_blogger,34,31.5
+Amplification,developer,16,14.8
+Amplification,community_user,13,12.0
+Sustained,creator_blogger,233,33.6
+Sustained,unknown,215,31.0
+Sustained,developer,144,20.8
+Sustained,community_user,96,13.9
+Sustained,company,4,0.6
+Sustained,media,1,0.1
