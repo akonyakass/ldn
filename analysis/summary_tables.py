@@ -23,6 +23,8 @@ Charts produced:
   12. bar_query_group_engagement.png   — which query groups surface the best content
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 

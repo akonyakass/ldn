@@ -13,6 +13,8 @@ Metrics computed:
   - Top 10 posts by engagement per platform
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 

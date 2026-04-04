@@ -8,6 +8,8 @@ Answers:
   - Which author types dominate which categories?
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 

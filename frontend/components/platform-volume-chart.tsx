@@ -10,14 +10,16 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-const PLATFORM_COLORS: Record<string, string> = {
-  youtube: "#FF0000",
-  x: "#1DA1F2",
-  tiktok: "#25F4EE",
-  reddit: "#FF4500",
-  threads: "#a855f7",
-};
+import {
+  chartAxisLine,
+  chartAxisTick,
+  chartBarMargin,
+  chartGrid,
+  chartTooltipContent,
+  chartTooltipLabel,
+  DEFAULT_SERIES_COLOR,
+  PLATFORM_COLORS,
+} from "@/lib/chart-theme";
 
 type Props = {
   platforms: string[];
@@ -28,7 +30,7 @@ export function PlatformVolumeChart({ platforms, counts }: Props) {
   const data = platforms.map((name, i) => ({
     name,
     count: counts[i] ?? 0,
-    fill: PLATFORM_COLORS[name] ?? "#22d3ee",
+    fill: PLATFORM_COLORS[name] ?? DEFAULT_SERIES_COLOR,
   }));
 
   if (!data.length) {
@@ -42,24 +44,13 @@ export function PlatformVolumeChart({ platforms, counts }: Props) {
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-          <XAxis
-            dataKey="name"
-            tick={{ fill: "#a1a1aa", fontSize: 12 }}
-            axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
-          />
-          <YAxis
-            tick={{ fill: "#a1a1aa", fontSize: 12 }}
-            axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
-          />
+        <BarChart data={data} margin={chartBarMargin}>
+          <CartesianGrid {...chartGrid} />
+          <XAxis dataKey="name" tick={chartAxisTick} axisLine={chartAxisLine} />
+          <YAxis tick={chartAxisTick} axisLine={chartAxisLine} />
           <Tooltip
-            contentStyle={{
-              background: "rgba(15,15,25,0.95)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "12px",
-            }}
-            labelStyle={{ color: "#e4e4e7" }}
+            contentStyle={chartTooltipContent}
+            labelStyle={chartTooltipLabel}
           />
           <Bar dataKey="count" radius={[6, 6, 0, 0]}>
             {data.map((entry, i) => (

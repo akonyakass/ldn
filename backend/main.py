@@ -2,6 +2,9 @@
 FastAPI server: serves dataset, outputs, and controlled dry-run pipeline refresh.
 """
 
+from __future__ import annotations
+
+import json
 import os
 import re
 import subprocess
@@ -9,9 +12,18 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
+
+from analysis.content_analysis import category_performance_table, creator_vs_company
+from analysis.narrative_analysis import (
+    narrative_frequency_table,
+    narrative_over_time,
+    query_group_distribution,
+    top_ngrams,
+)
+from analysis.platform_analysis import platform_engagement_table, platform_volume_table
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -139,6 +151,29 @@ def _load_dataset() -> pd.DataFrame:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
+
+
+def _load_dataset_for_charts() -> pd.DataFrame:
+    """Wider numeric coercion + columns expected by analysis helpers."""
+    df = _load_dataset()
+    df = df.copy()
+    df["engagement"] = pd.to_numeric(df["engagement"], errors="coerce").fillna(0)
+    if "engagement_rate" in df.columns:
+        df["engagement_rate"] = pd.to_numeric(df["engagement_rate"], errors="coerce")
+    for c in ("likes", "comments"):
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+    if "has_views" not in df.columns and "views" in df.columns:
+        df["has_views"] = df["views"].notna() & (df["views"] > 0)
+    elif "has_views" not in df.columns:
+        df["has_views"] = False
+    return df
+
+
+def _df_records(df: pd.DataFrame | None) -> list[dict[str, Any]]:
+    if df is None or df.empty:
+        return []
+    return json.loads(df.to_json(orient="records", date_format="iso"))
 
 
 app = FastAPI(title="LDN Growth Intel API", version="1.0.0")
@@ -299,4 +334,83 @@ def stats_platform_volume() -> dict:
     return {
         "platforms": vc.index.tolist(),
         "counts": [int(x) for x in vc.values],
+    }
+
+
+@app.get("/api/stats/dashboard-charts")
+def stats_dashboard_charts() -> dict:
+    """
+    Structured series for the dashboard charts page (Recharts).
+    Mirrors analysis/summary_tables.py without writing PNGs.
+    """
+    empty: dict[str, Any] = {
+        "platform_volume": [],
+        "platform_engagement": [],
+        "content_categories": [],
+        "category_median_engagement": [],
+        "author_posts": [],
+        "author_engagement_share": [],
+        "narratives": [],
+        "bigrams": [],
+        "narrative_trend": None,
+        "scatter_points": [],
+        "query_groups": [],
+    }
+    if not DATASET_PATH.is_file():
+        return empty
+    try:
+        df = _load_dataset_for_charts()
+    except Exception:  # noqa: BLE001
+        return empty
+
+    if "source_platform" not in df.columns:
+        return empty
+
+    vol = platform_volume_table(df)
+    eng = platform_engagement_table(df)
+    perf = category_performance_table(df)
+    cvc = creator_vs_company(df)
+    narr = narrative_frequency_table(df)
+    qg = query_group_distribution(df)
+    bigrams = top_ngrams(df, n=2, top_k=30)
+    trend = narrative_over_time(df)
+
+    cat_counts = (
+        df["content_category"].fillna("unknown").value_counts().sort_values(ascending=True)
+    )
+    content_categories = [
+        {"category": str(i), "count": int(v)} for i, v in cat_counts.items()
+    ]
+
+    perf_sorted = perf.sort_values("median_engagement", ascending=True).tail(15)
+    category_median = _df_records(perf_sorted)
+
+    tier1_mask = (
+        df["views"].notna()
+        & (df["views"] > 0)
+        & (df["engagement"] > 0)
+    )
+    tier1 = df[tier1_mask]
+    if "trust_tier" in df.columns:
+        tier1 = tier1[tier1["trust_tier"] == "tier1_api"]
+    if len(tier1) > 2000:
+        tier1 = tier1.sample(n=2000, random_state=42)
+    scatter = tier1[["source_platform", "views", "engagement"]].rename(
+        columns={"source_platform": "platform"}
+    )
+
+    return {
+        "platform_volume": _df_records(vol),
+        "platform_engagement": _df_records(eng),
+        "content_categories": content_categories,
+        "category_median_engagement": category_median,
+        "author_posts": _df_records(cvc[["author_type", "post_count"]]),
+        "author_engagement_share": _df_records(
+            cvc[["author_type", "pct_of_total_engagement"]]
+        ),
+        "narratives": _df_records(narr.head(12)),
+        "bigrams": _df_records(bigrams.head(20)),
+        "narrative_trend": _df_records(trend) if trend is not None and not trend.empty else None,
+        "scatter_points": _df_records(scatter),
+        "query_groups": _df_records(qg),
     }

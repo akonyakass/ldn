@@ -11,6 +11,8 @@ Approach:
   5. "Claude vs ChatGPT" narrative intensity score
 """
 
+from __future__ import annotations
+
 import re
 import logging
 from pathlib import Path
