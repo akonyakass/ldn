@@ -54,8 +54,9 @@ def _search_page(query: str, next_token: str | None = None) -> dict:
         "tweet.fields": ",".join(X_TWEET_FIELDS),
         "user.fields": ",".join(X_USER_FIELDS),
         "expansions": ",".join(X_EXPANSIONS),
-        "start_time": X_START_TIME,
     }
+    if X_START_TIME:
+        params["start_time"] = X_START_TIME
     if next_token:
         params["next_token"] = next_token
     resp = requests.get(SEARCH_URL, headers=_auth_headers(), params=params, timeout=15)

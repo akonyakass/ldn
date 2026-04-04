@@ -1,12 +1,12 @@
 narrative,post_count,platform_breakdown
-coding_use_case,508,"{'youtube': 452, 'reddit': 56}"
-vs_chatgpt,99,"{'youtube': 91, 'reddit': 8}"
-benchmark_hype,69,"{'youtube': 63, 'reddit': 6}"
-switch_to_claude,28,"{'reddit': 16, 'youtube': 12}"
-claude_wins,19,{'youtube': 19}
-anthropic_news,15,"{'reddit': 10, 'youtube': 5}"
-creator_workflow,8,"{'youtube': 5, 'reddit': 3}"
+coding_use_case,839,"{'youtube': 452, 'x': 331, 'reddit': 56}"
+vs_chatgpt,101,"{'youtube': 91, 'reddit': 8, 'x': 2}"
+benchmark_hype,76,"{'youtube': 63, 'x': 7, 'reddit': 6}"
+switch_to_claude,35,"{'reddit': 16, 'youtube': 12, 'x': 7}"
+anthropic_news,25,"{'x': 10, 'reddit': 10, 'youtube': 5}"
+claude_wins,21,"{'youtube': 19, 'x': 2}"
+creator_workflow,16,"{'x': 8, 'youtube': 5, 'reddit': 3}"
+writing_use_case,2,"{'x': 1, 'reddit': 1}"
 jailbreak_safety,2,{'reddit': 2}
-writing_use_case,1,{'reddit': 1}
 claude_loses,0,{}
 viral_moment,0,{}

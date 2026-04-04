@@ -1,3 +1,4 @@
 platform,total_engagement,median_engagement,mean_engagement,total_views,median_views,median_eng_rate,rows_with_views
 youtube,18315715,664.0,10902.21130952381,631980467.0,27445.0,0.024342500000000003,1680
 reddit,442626,563.0,1932.8646288209607,0.0,,,0
+x,7004,1.0,5.822111388196176,510870.0,24.0,0.002665,1182

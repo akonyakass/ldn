@@ -40,7 +40,8 @@ X_TWEET_FIELDS = [
 ]
 X_USER_FIELDS = ["id", "name", "username", "public_metrics", "verified"]
 X_EXPANSIONS = ["author_id"]
-X_START_TIME = "2024-01-01T00:00:00Z"  # ISO 8601
+# Basic tier: recent search only covers last 7 days — no start_time override needed
+X_START_TIME = None  # set to None to omit; collector will skip if None
 
 # ── Public-page (supplemental) settings ───────────────────────────────────────
 SUPPLEMENTAL_MAX_RESULTS_PER_QUERY = 10  # keep low; quality > quantity
