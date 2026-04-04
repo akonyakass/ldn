@@ -341,6 +341,23 @@ DEVELOPER_PATTERNS = [
     r"github\.com",
     r"dev\.to",
     r"\btech\b.{0,10}(blog|writer)",
+    # handle-level signals
+    r"_dev\b",
+    r"\bdev_",
+    r"_coder\b",
+    r"_builds?\b",
+    r"_codes?\b",
+    r"\bbuilds?\b",
+    r"writes?\s+code",
+    r"\bstack\b",         # Better Stack, Full Stack, etc.
+    r"\bfullstack\b",
+    r"\bbackend\b",
+    r"\bfrontend\b",
+    r"\bhacker\b",
+    r"\bml\b",
+    r"\bllm\b",
+    r"\bcloud\b",
+    r"\bopen.?source\b",
 ]
 
 CREATOR_PATTERNS = [
@@ -350,6 +367,32 @@ CREATOR_PATTERNS = [
     r"\bnewsletter\b",
     r"\btutorials?\b",
     r"\breviews?\s+channel\b",
+    # YouTube channel name patterns: "Name | Topic" or "Name with Topic"
+    r"\|\s*(ai|tech|code|coding|automation|seo|learn)",
+    r"\bwith\s+(ai|claude|code|kyle|nate)\b",
+    # Common creator keywords in channel names
+    r"\bai\s+(automation|academy|mastery|simplified|explained|lab|hub|tips)\b",
+    r"\b(learn|mastering|teaching)\s+(ai|code|coding|python|tech)\b",
+    r"\b(ai|tech|code|coding|seo)\s+(with|by|from)\b",
+    r"\bnever\s+code\s+alone\b",
+    r"\bcaleb\b",
+    r"\bcole\s+medin\b",
+    r"\bnate\s+herk\b",
+    r"\bkyle\s+balmer\b",
+    r"\bjulian\s+goldie\b",
+    r"\bleon\s+van\s+zyl\b",
+    r"\bgeorge\s+ai\b",
+    r"\bmedul\b",
+    # AI/tech newsletter / blog patterns
+    r"\baim\s+network\b",
+    r"\btraction\b",
+    r"\bstudio\b",
+    r"\b(tech|ai|code)\s*bytes?\b",
+    # X/Twitter creator signals in handle
+    r"ramonov",
+    r"sabrina_",
+    r"_ai\b",
+    r"\bai_",
 ]
 
 
@@ -362,7 +405,7 @@ def _classify_category(text: str) -> str:
     return FALLBACK_CATEGORY
 
 
-def _classify_author_type(handle: str, title: str = "", snippet: str = "") -> str:
+def _classify_author_type(handle: str, title: str = "", snippet: str = "", platform: str = "") -> str:
     if not handle:
         return "unknown"
     handle_lower = handle.lower()
@@ -388,9 +431,17 @@ def _classify_author_type(handle: str, title: str = "", snippet: str = "") -> st
         if re.search(pat, handle_lower) or re.search(pat, text_lower):
             return "creator_blogger"
 
-    # Reddit community user pattern (u/username style)
+    # Reddit: u/username style OR platform=reddit with random-looking handle
     if handle_lower.startswith("u/") or handle_lower.startswith("/u/"):
         return "community_user"
+    if platform == "reddit":
+        # Reddit handles with numbers, underscores, or mixed-case random patterns
+        # are almost always regular community users
+        return "community_user"
+
+    # X/YouTube: if handle has "ai", "tech", "code" etc. → creator_blogger (catch-all)
+    if re.search(r"(ai|tech|code|coding|coder|build|hack|dev|learn|teach)", handle_lower):
+        return "creator_blogger"
 
     return "unknown"
 
@@ -416,6 +467,7 @@ def label(df: pd.DataFrame) -> pd.DataFrame:
             str(r.get("author_handle", "") or ""),
             str(r.get("title", "") or ""),
             str(r.get("text_snippet", "") or ""),
+            str(r.get("source_platform", "") or ""),
         ),
         axis=1,
     )
