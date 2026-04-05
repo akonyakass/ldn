@@ -14,7 +14,9 @@ import {
   chartAxisLine,
   chartAxisTick,
   chartBarMargin,
-  chartGrid,
+  chartBarRadiusTop,
+  chartGridVerticalBars,
+  chartBarTooltipCursor,
   chartTooltipContent,
   chartTooltipLabel,
   DEFAULT_SERIES_COLOR,
@@ -45,14 +47,15 @@ export function PlatformVolumeChart({ platforms, counts }: Props) {
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={chartBarMargin}>
-          <CartesianGrid {...chartGrid} />
+          <CartesianGrid {...chartGridVerticalBars} />
           <XAxis dataKey="name" tick={chartAxisTick} axisLine={chartAxisLine} />
           <YAxis tick={chartAxisTick} axisLine={chartAxisLine} />
           <Tooltip
+            cursor={chartBarTooltipCursor}
             contentStyle={chartTooltipContent}
             labelStyle={chartTooltipLabel}
           />
-          <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+          <Bar dataKey="count" radius={[...chartBarRadiusTop]}>
             {data.map((entry, i) => (
               <Cell key={`c-${i}`} fill={entry.fill} />
             ))}

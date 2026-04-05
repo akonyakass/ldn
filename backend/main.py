@@ -24,6 +24,7 @@ from analysis.narrative_analysis import (
     top_ngrams,
 )
 from analysis.platform_analysis import platform_engagement_table, platform_volume_table
+from analysis.release_timeline import build_timeline_payload, empty_timeline_payload
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -366,6 +367,23 @@ def stats_platform_volume() -> dict:
         "platforms": vc.index.tolist(),
         "counts": [int(x) for x in vc.values],
     }
+
+
+@app.get("/api/stats/timeline/{model_id}")
+def stats_timeline(model_id: str) -> dict[str, Any]:
+    """JSON series for model release timelines (Recharts), mirroring sonnet35/opus46 timeline scripts."""
+    mid = model_id.strip().lower()
+    if mid not in ("sonnet35", "opus46"):
+        raise HTTPException(
+            status_code=400,
+            detail="model_id must be sonnet35 or opus46",
+        )
+    if not DATASET_PATH.is_file():
+        return empty_timeline_payload(mid)
+    try:
+        return build_timeline_payload(DATASET_PATH, mid)
+    except Exception:  # noqa: BLE001
+        return empty_timeline_payload(mid)
 
 
 @app.get("/api/stats/dashboard-charts")

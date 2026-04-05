@@ -1,676 +1,375 @@
 """
-analysis/release_timeline.py
-------------------------------
-Answers: "How is Claude attention CREATED, AMPLIFIED, and SUSTAINED after a release?"
-
-Focused on: Claude Opus 4.6 — Released February 2026
-  • 80.8% SWE-bench Verified
-  • 68.8% ARC-AGI-2
-  • 200K context window
-
-Release lifecycle phases (days relative to release date):
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  PRE-LAUNCH    │  LAUNCH SPIKE  │  AMPLIFICATION │  SUSTAINED  │
-  │  [-30d, -1d]   │  [0d, +3d]     │  [+4d, +14d]   │  [+15d, …] │
-  └─────────────────────────────────────────────────────────────────┘
-
-Outputs:
-  outputs/tables/release_phase_volume.csv        — posts per day/phase
-  outputs/tables/release_phase_engagement.csv    — engagement per phase
-  outputs/tables/release_top_posts.csv           — top 20 posts by engagement near launch
-  outputs/tables/release_content_mix.csv         — content category mix per phase
-  outputs/tables/release_author_type_mix.csv     — who drove each phase (creator vs media vs company)
-  outputs/charts/line_release_volume.png         — daily post volume with phase bands
-  outputs/charts/line_release_engagement.png     — daily total engagement with phase bands
-  outputs/charts/bar_release_phase_category.png  — category mix per phase (stacked bar)
-  outputs/charts/bar_release_author_phase.png    — author type per phase
-  outputs/charts/bar_release_top_posts.png       — top posts by engagement in launch window
+JSON payloads for release-window timelines (Recharts on the frontend).
+Logic mirrors sonnet35_timeline.py and opus46_timeline.py without matplotlib.
 """
 
-import logging
+from __future__ import annotations
+
+import json
+import re
 from pathlib import Path
+from typing import Any
 
-import pandas as pd
 import numpy as np
-import matplotlib
+import pandas as pd
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.ticker as mticker
+PHASE_ORDER = ["Pre-Launch", "Launch Spike", "Amplification", "Sustained"]
 
-from config.settings import FINAL_DATA_DIR
-
-logger = logging.getLogger(__name__)
-
-CHARTS = Path("outputs/charts")
-TABLES = Path("outputs/tables")
-
-# ── Release definition ─────────────────────────────────────────────────────────
-RELEASE_DATE = pd.Timestamp("2026-02-01")  # Claude Opus 4.6 — February 2026
-RELEASE_NAME = "Claude Opus 4.6"
-RELEASE_HIGHLIGHTS = [
-    "80.8% SWE-bench Verified",
-    "68.8% ARC-AGI-2",
-    "200K context window",
-    "Most capable AI model",
-]
-
-# Phase boundaries (days relative to release)
-PHASES = {
+PHASE_BOUNDS: dict[str, tuple[int, int]] = {
     "Pre-Launch": (-30, -1),
     "Launch Spike": (0, 3),
     "Amplification": (4, 14),
     "Sustained": (15, 60),
 }
 
-PHASE_COLORS = {
+PHASE_COLORS: dict[str, str] = {
     "Pre-Launch": "#AED6F1",
     "Launch Spike": "#E74C3C",
     "Amplification": "#F39C12",
     "Sustained": "#2ECC71",
 }
 
-# Opus 4.6-specific keywords to filter relevant posts
-OPUS_KEYWORDS = [
-    r"opus\s*4\.6",
-    r"claude\s+opus\s+4",
-    r"claude\s+4\b",
-    r"opus\s+4\b",
-    r"swe.bench",
-    r"arc.agi",
-    r"80\.8",
-    r"68\.8",
-    r"most\s+capable",
-    r"anthropic.*release",
-    r"claude.*release",
-    r"new\s+claude",
-    r"claude.*launch",
-    r"claude.*update",
-    r"claude.*announ",
+AUTHOR_COLORS: dict[str, str] = {
+    "company": "#E74C3C",
+    "media": "#E67E22",
+    "creator_blogger": "#3498DB",
+    "developer": "#2ECC71",
+    "community_user": "#9B59B6",
+    "unknown": "#BDC3C7",
+}
+
+SONNET35_KW = [
+    r"claude\s*3[\.\-]5",
+    r"3\.5\s+sonnet",
+    r"sonnet\s+3\.5",
+    r"claude.*sonnet.*3",
+    r"new\s+claude\s+model",
+    r"anthropic.*new\s+model",
+    r"claude.*artifacts",
+    r"artifacts.*claude",
+    r"claude.*smarter\s+than",
+    r"claude.*better\s+than\s+gpt",
+    r"claude.*beats.*gpt",
+    r"claude.*frontier",
+    r"most\s+intelligent.*claude",
+    r"claude.*most\s+intelligent",
+    r"claude.*vision",
+    r"claude.*graduate",
+    r"claude.*coding.*model",
+    r"claude.*takes.*crown",
+    r"claude.*crown",
+    r"claude.*outperform",
+    r"claude.*surpass",
+    r"claude\s+opus\s*3",
+    r"haiku.*claude",
 ]
 
+OPUS_KW = [
+    r"opus\s*4\.6",
+    r"claude\s+opus\s+4",
+    r"claude\s+4\.6",
+    r"swe.bench",
+    r"arc.agi.2",
+    r"80\.8",
+    r"68\.8",
+    r"most\s+capable.*model",
+    r"model.*most\s+capable",
+    r"introducing\s+claude\s+opus",
+    r"claude.*1m\s+context",
+    r"opus.*agentic",
+    r"greatest\s+ai\s+coding",
+    r"claude.*conscious",
+    r"did\s+claude\s+become",
+    r"claude\s+cowork.*opus",
+    r"opus.*cowork",
+    r"claude\s+4\.5",
+    r"claude\s+4\b",
+    r"new\s+claude\s+model",
+    r"anthropic.*new\s+model",
+]
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+MODEL_CONFIG: dict[str, dict[str, Any]] = {
+    "sonnet35": {
+        "release_date": "2024-06-20",
+        "release_label": "Claude 3.5 Sonnet",
+        "x_axis_hint": "Days relative to release (0 = Jun 20, 2024)",
+        "keywords": SONNET35_KW,
+        "benchmarks": [
+            "MMLU 88.7%",
+            "HumanEval 92.0%",
+            "Graduate-Level Reasoning",
+            "Artifacts UI",
+        ],
+    },
+    "opus46": {
+        "release_date": "2026-02-05",
+        "release_label": "Claude Opus 4.6",
+        "x_axis_hint": "Days relative to release (0 = Feb 5, 2026)",
+        "keywords": OPUS_KW,
+        "benchmarks": [
+            "SWE-bench 80.8%",
+            "ARC-AGI-2 68.8%",
+            "HumanEval 97%+",
+            "200K ctx",
+        ],
+    },
+}
 
 
-def _save_fig(fig: plt.Figure, name: str) -> None:
-    CHARTS.mkdir(parents=True, exist_ok=True)
-    path = CHARTS / name
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    logger.info(f"[Timeline] Saved {path}")
+def _slug_key(name: str) -> str:
+    s = re.sub(r"[^a-zA-Z0-9]+", "_", str(name).lower()).strip("_")
+    return s or "unknown"
 
 
-def _save_table(df: pd.DataFrame, name: str) -> None:
-    TABLES.mkdir(parents=True, exist_ok=True)
-    path = TABLES / name
-    df.to_csv(path, index=False)
-    logger.info(f"[Timeline] Saved {path}")
-
-
-def _assign_phase(days: float) -> str:
-    for phase, (lo, hi) in PHASES.items():
-        if lo <= days <= hi:
-            return phase
+def _phase_for_day(d: Any) -> str:
+    if pd.isna(d):
+        return "Unknown"
+    for pname, (lo, hi) in PHASE_BOUNDS.items():
+        if lo <= int(d) <= hi:
+            return pname
     return "Outside Window"
 
 
-def _add_phase_bands(ax, y_max: float, alpha: float = 0.12) -> None:
-    """Shade phase regions on a time-series axis (x = days relative to release)."""
-    for phase, (lo, hi) in PHASES.items():
-        ax.axvspan(lo, hi + 1, alpha=alpha, color=PHASE_COLORS[phase], label=phase)
-    ax.axvline(
-        0,
-        color="#E74C3C",
-        linewidth=1.8,
-        linestyle="--",
-        alpha=0.8,
-        label="Release day",
-    )
+def _df_records(df: pd.DataFrame | None) -> list[dict[str, Any]]:
+    if df is None or df.empty:
+        return []
+    return json.loads(df.to_json(orient="records", date_format="iso"))
 
 
-# ── Data prep ──────────────────────────────────────────────────────────────────
+def _load_scope(dataset_path: Path, model_id: str) -> pd.DataFrame:
+    cfg = MODEL_CONFIG[model_id]
+    release = pd.Timestamp(cfg["release_date"])
+    df = pd.read_csv(dataset_path)
+    for c in ("engagement", "views", "likes", "comments", "reposts_shares"):
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["pub"] = pd.to_datetime(df["published_at"], errors="coerce", utc=True)
+    df["pub_date"] = df["pub"].dt.tz_localize(None).dt.normalize()
+    df["days"] = (df["pub_date"] - release).dt.days
+    df["phase"] = df["days"].apply(_phase_for_day)
+    text = (df["title"].fillna("") + " " + df["text_snippet"].fillna("")).str.lower()
+    kws: list[str] = cfg["keywords"]
+    df["kw_match"] = text.apply(lambda t: any(re.search(k, t) for k in kws))
+    df["in_scope"] = df["kw_match"] | df["days"].between(-30, 60)
+    return df[df["in_scope"]].copy()
 
 
-def load_and_prep(dataset_path: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Returns:
-        df_all   — full dataset with `days_from_release` and `phase` added
-        df_opus  — subset of posts relevant to Opus 4.6 release
-    """
-    path = dataset_path or str(Path(FINAL_DATA_DIR) / "dataset.csv")
-    df = pd.read_csv(path)
-
-    # Parse dates
-    df["published_at"] = pd.to_datetime(df["published_at"], errors="coerce", utc=True)
-    df["pub_date"] = df["published_at"].dt.tz_localize(None).dt.normalize()
-    df["days_from_release"] = (df["pub_date"] - RELEASE_DATE).dt.days
-    df["phase"] = df["days_from_release"].apply(
-        lambda d: _assign_phase(d) if pd.notna(d) else "Unknown"
-    )
-
-    # Filter to posts that are (a) within [-30, +60] days OR (b) mention Opus 4.6
-    import re
-
-    combined_text = (
-        df["title"].fillna("") + " " + df["text_snippet"].fillna("")
-    ).str.lower()
-    opus_mask = combined_text.apply(
-        lambda t: any(re.search(kw, t) for kw in OPUS_KEYWORDS)
-    )
-    window_mask = df["days_from_release"].between(-30, 60)
-
-    df_opus = df[opus_mask | window_mask].copy()
-
-    n_total = len(df)
-    n_opus = len(df_opus)
-    n_dated = df_opus["pub_date"].notna().sum()
-    logger.info(
-        f"[Timeline] {RELEASE_NAME}: {n_opus}/{n_total} posts in scope "
-        f"({n_dated} with dates, keyword match: {opus_mask.sum()})"
-    )
-    return df, df_opus
-
-
-# ── Analysis tables ────────────────────────────────────────────────────────────
-
-
-def phase_volume_table(df_opus: pd.DataFrame) -> pd.DataFrame:
-    """Post count and total engagement per phase."""
-    df_dated = df_opus[df_opus["pub_date"].notna()]
-    tbl = (
-        df_dated.groupby("phase")
+def _tbl_phase_summary(df: pd.DataFrame) -> pd.DataFrame:
+    dated = df[df["pub_date"].notna() & df["phase"].isin(PHASE_BOUNDS)]
+    t = (
+        dated.groupby("phase")
         .agg(
-            post_count=("post_id", "count"),
-            total_engagement=("engagement", "sum"),
-            median_engagement=("engagement", "median"),
-            mean_engagement=("engagement", "mean"),
+            posts=("post_id", "count"),
+            total_eng=("engagement", "sum"),
+            median_eng=("engagement", "median"),
+            mean_eng=("engagement", "mean"),
         )
         .reset_index()
     )
-    # Sort by phase order
-    phase_order = list(PHASES.keys()) + ["Outside Window", "Unknown"]
-    tbl["_order"] = tbl["phase"].map({p: i for i, p in enumerate(phase_order)})
-    tbl = tbl.sort_values("_order").drop(columns="_order")
-    tbl["total_engagement"] = tbl["total_engagement"].round(0).astype(int)
-    tbl["median_engagement"] = tbl["median_engagement"].round(1)
-    tbl["mean_engagement"] = tbl["mean_engagement"].round(1)
-    return tbl
+    order = {p: i for i, p in enumerate(PHASE_ORDER)}
+    t["_o"] = t["phase"].map(order)
+    t = t.sort_values("_o").drop(columns="_o")
+    t["total_eng"] = t["total_eng"].round(0).astype(int)
+    t["median_eng"] = t["median_eng"].round(1)
+    t["mean_eng"] = t["mean_eng"].round(1)
+    return t
 
 
-def daily_volume_table(df_opus: pd.DataFrame) -> pd.DataFrame:
-    """Daily post count and engagement for time-series chart."""
-    df_dated = df_opus[
-        df_opus["pub_date"].notna() & df_opus["days_from_release"].between(-30, 60)
+def _tbl_daily(df: pd.DataFrame) -> pd.DataFrame:
+    dated = df[df["pub_date"].notna() & df["days"].between(-30, 60)]
+    return (
+        dated.groupby("days")
+        .agg(
+            posts=("post_id", "count"),
+            total_eng=("engagement", "sum"),
+            median_eng=("engagement", "median"),
+        )
+        .reset_index()
+        .sort_values("days")
+    )
+
+
+def _tbl_category_by_phase(df: pd.DataFrame) -> pd.DataFrame:
+    dated = df[df["phase"].isin(PHASE_BOUNDS)]
+    t = dated.groupby(["phase", "content_category"]).size().reset_index(name="count")
+    totals = t.groupby("phase")["count"].transform("sum")
+    t["pct"] = (t["count"] / totals * 100).round(1)
+    order = {p: i for i, p in enumerate(PHASE_ORDER)}
+    t["_o"] = t["phase"].map(order)
+    return t.sort_values(["_o", "count"], ascending=[True, False]).drop(columns="_o")
+
+
+def _tbl_author_by_phase(df: pd.DataFrame) -> pd.DataFrame:
+    dated = df[df["phase"].isin(PHASE_BOUNDS)]
+    t = dated.groupby(["phase", "author_type"]).size().reset_index(name="count")
+    totals = t.groupby("phase")["count"].transform("sum")
+    t["pct"] = (t["count"] / totals * 100).round(1)
+    order = {p: i for i, p in enumerate(PHASE_ORDER)}
+    t["_o"] = t["phase"].map(order)
+    return t.sort_values(["_o", "count"], ascending=[True, False]).drop(columns="_o")
+
+
+def _tbl_top_posts(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
+    window = df[df["days"].between(-3, 14)].copy()
+    cols = [
+        "source_platform",
+        "author_handle",
+        "title",
+        "text_snippet",
+        "published_at",
+        "days",
+        "phase",
+        "views",
+        "likes",
+        "engagement",
+        "content_category",
+        "author_type",
+        "url",
     ]
-    tbl = (
-        df_dated.groupby("days_from_release")
-        .agg(
-            post_count=("post_id", "count"),
-            total_engagement=("engagement", "sum"),
-            median_engagement=("engagement", "median"),
-        )
-        .reset_index()
-        .sort_values("days_from_release")
-    )
-    return tbl
-
-
-def phase_category_mix(df_opus: pd.DataFrame) -> pd.DataFrame:
-    """Content category distribution per phase (% of posts in that phase)."""
-    df_dated = df_opus[df_opus["phase"].isin(PHASES.keys())]
-    tbl = (
-        df_dated.groupby(["phase", "content_category"]).size().reset_index(name="count")
-    )
-    totals = tbl.groupby("phase")["count"].transform("sum")
-    tbl["pct"] = (tbl["count"] / totals * 100).round(1)
-    phase_order = list(PHASES.keys())
-    tbl["_order"] = tbl["phase"].map({p: i for i, p in enumerate(phase_order)})
-    tbl = tbl.sort_values(["_order", "count"], ascending=[True, False]).drop(
-        columns="_order"
-    )
-    return tbl
-
-
-def phase_author_mix(df_opus: pd.DataFrame) -> pd.DataFrame:
-    """Author type distribution per phase."""
-    df_dated = df_opus[df_opus["phase"].isin(PHASES.keys())]
-    tbl = df_dated.groupby(["phase", "author_type"]).size().reset_index(name="count")
-    totals = tbl.groupby("phase")["count"].transform("sum")
-    tbl["pct"] = (tbl["count"] / totals * 100).round(1)
-    phase_order = list(PHASES.keys())
-    tbl["_order"] = tbl["phase"].map({p: i for i, p in enumerate(phase_order)})
-    tbl = tbl.sort_values(["_order", "count"], ascending=[True, False]).drop(
-        columns="_order"
-    )
-    return tbl
-
-
-def top_posts_launch_window(df_opus: pd.DataFrame, n: int = 20) -> pd.DataFrame:
-    """Top posts by engagement within the launch window (days -3 to +14)."""
-    window = df_opus[df_opus["days_from_release"].between(-3, 14)].copy()
+    have = [c for c in cols if c in window.columns]
     top = (
         window.sort_values("engagement", ascending=False)
-        .head(n)[
-            [
-                "source_platform",
-                "author_handle",
-                "title",
-                "text_snippet",
-                "published_at",
-                "days_from_release",
-                "phase",
-                "views",
-                "likes",
-                "engagement",
-                "content_category",
-                "author_type",
-                "url",
-            ]
-        ]
+        .head(n)[have]
         .reset_index(drop=True)
     )
-    top["title"] = top["title"].fillna("").str[:120]
-    top["text_snippet"] = top["text_snippet"].fillna("").str[:120]
+    if "title" in top.columns:
+        top["title"] = top["title"].fillna("").astype(str).str[:120]
+    if "text_snippet" in top.columns:
+        top["text_snippet"] = top["text_snippet"].fillna("").astype(str).str[:120]
     return top
 
 
-# ── Charts ────────────────────────────────────────────────────────────────────
-
-
-def chart_daily_volume(daily: pd.DataFrame) -> None:
-    """Line chart: daily post count with phase band shading."""
-    if daily.empty:
-        logger.warning("[Timeline] No dated posts — skipping daily volume chart.")
-        return
-
-    fig, ax = plt.subplots(figsize=(14, 5))
-    _add_phase_bands(ax, daily["post_count"].max() * 1.15)
-    ax.plot(
-        daily["days_from_release"],
-        daily["post_count"],
-        color="#2C3E50",
-        linewidth=2,
-        marker="o",
-        markersize=4,
-        zorder=5,
-    )
-    ax.fill_between(
-        daily["days_from_release"], daily["post_count"], alpha=0.15, color="#2C3E50"
-    )
-
-    ax.set_title(
-        f"{RELEASE_NAME} — Daily Post Volume\n"
-        f"How attention is CREATED, AMPLIFIED, and SUSTAINED",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.set_xlabel("Days relative to release (0 = launch day)", fontsize=11)
-    ax.set_ylabel("Posts collected", fontsize=11)
-    ax.set_xlim(-32, 62)
-
-    # Benchmark callouts
-    for highlight in RELEASE_HIGHLIGHTS[:2]:
-        ax.annotate(
-            highlight,
-            xy=(0, daily["post_count"].max() * 0.85),
-            xytext=(5, daily["post_count"].max() * 0.95),
-            fontsize=8,
-            color="#E74C3C",
-            arrowprops=dict(arrowstyle="->", color="#E74C3C", lw=0.8),
-        )
-        break  # just one callout to keep clean
-
-    # Phase legend
-    handles = [
-        mpatches.Patch(
-            color=PHASE_COLORS[p], alpha=0.6, label=f"{p} ({lo:+d}d to {hi:+d}d)"
-        )
-        for p, (lo, hi) in PHASES.items()
-    ]
-    handles.append(
-        plt.Line2D(
-            [0],
-            [0],
-            color="#E74C3C",
-            linewidth=1.8,
-            linestyle="--",
-            label="Release day",
-        )
-    )
-    ax.legend(handles=handles, loc="upper left", fontsize=8, framealpha=0.9)
-    ax.grid(axis="y", alpha=0.3)
-
-    _save_fig(fig, "line_release_volume.png")
-
-
-def chart_daily_engagement(daily: pd.DataFrame) -> None:
-    """Line chart: daily total engagement with phase band shading."""
-    if daily.empty:
-        return
-
-    fig, ax = plt.subplots(figsize=(14, 5))
-    _add_phase_bands(ax, daily["total_engagement"].max() * 1.15)
-    ax.plot(
-        daily["days_from_release"],
-        daily["total_engagement"],
-        color="#8E44AD",
-        linewidth=2,
-        marker="o",
-        markersize=4,
-        zorder=5,
-    )
-    ax.fill_between(
-        daily["days_from_release"],
-        daily["total_engagement"],
-        alpha=0.15,
-        color="#8E44AD",
-    )
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
-
-    ax.set_title(
-        f"{RELEASE_NAME} — Daily Total Engagement\n"
-        f"Likes + Comments + Reposts over the release lifecycle",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.set_xlabel("Days relative to release (0 = launch day)", fontsize=11)
-    ax.set_ylabel("Total engagement", fontsize=11)
-    ax.set_xlim(-32, 62)
-
-    handles = [
-        mpatches.Patch(
-            color=PHASE_COLORS[p], alpha=0.6, label=f"{p} ({lo:+d}d to {hi:+d}d)"
-        )
-        for p, (lo, hi) in PHASES.items()
-    ]
-    handles.append(
-        plt.Line2D(
-            [0],
-            [0],
-            color="#E74C3C",
-            linewidth=1.8,
-            linestyle="--",
-            label="Release day",
-        )
-    )
-    ax.legend(handles=handles, loc="upper left", fontsize=8, framealpha=0.9)
-    ax.grid(axis="y", alpha=0.3)
-
-    _save_fig(fig, "line_release_engagement.png")
-
-
-def chart_phase_category_mix(phase_cat: pd.DataFrame) -> None:
-    """Stacked bar: content category mix per phase — what content type dominates each phase."""
-    if phase_cat.empty:
-        return
-
-    pivot = phase_cat.pivot_table(
+def _stack_mix_rows(
+    tbl: pd.DataFrame,
+    column: str,
+    phase_order: list[str],
+    top_n: int | None,
+) -> tuple[list[dict[str, Any]], list[str], dict[str, str], dict[str, str]]:
+    """Stacked % bar: one row per phase, slug keys for Recharts."""
+    if tbl.empty:
+        return [], [], {}, {}
+    pivot = tbl.pivot_table(
         index="phase",
-        columns="content_category",
+        columns=column,
         values="pct",
         aggfunc="sum",
         fill_value=0,
     )
-    # Reorder phases
-    phase_order = [p for p in PHASES.keys() if p in pivot.index]
-    pivot = pivot.reindex(phase_order)
-
-    # Pick top 8 categories by total pct
-    top_cats = pivot.sum().nlargest(8).index.tolist()
-    pivot = pivot[top_cats]
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    bottom = np.zeros(len(pivot))
-    colors = plt.cm.Set2(np.linspace(0, 1, len(top_cats)))
-
-    for i, cat in enumerate(top_cats):
-        ax.bar(pivot.index, pivot[cat], bottom=bottom, label=cat, color=colors[i])
-        # Label slices > 8%
-        for j, (val, bot) in enumerate(zip(pivot[cat], bottom)):
-            if val > 8:
-                ax.text(
-                    j,
-                    bot + val / 2,
-                    f"{val:.0f}%",
-                    ha="center",
-                    va="center",
-                    fontsize=8,
-                    color="white",
-                    fontweight="bold",
-                )
-        bottom += pivot[cat].values
-
-    ax.set_title(
-        f"{RELEASE_NAME} — Content Category Mix by Release Phase\n"
-        f"What type of content dominated each phase?",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.set_xlabel("Release Phase")
-    ax.set_ylabel("% of posts in phase")
-    ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=9, title="Category")
-    ax.set_ylim(0, 110)
-    ax.grid(axis="y", alpha=0.3)
-
-    _save_fig(fig, "bar_release_phase_category.png")
+    phases_existing = [p for p in phase_order if p in pivot.index]
+    pivot = pivot.reindex(phases_existing).fillna(0)
+    if top_n is not None:
+        col_sums = pivot.sum(axis=0).sort_values(ascending=False)
+        keep = col_sums.head(top_n).index.tolist()
+        pivot = pivot[keep]
+    keys: list[str] = []
+    key_labels: dict[str, str] = {}
+    for raw in pivot.columns:
+        sk = _slug_key(raw)
+        base = sk
+        n = 0
+        while sk in key_labels and key_labels[sk] != str(raw):
+            n += 1
+            sk = f"{base}_{n}"
+        keys.append(sk)
+        key_labels[sk] = str(raw)
+    rows: list[dict[str, Any]] = []
+    for phase in pivot.index:
+        row: dict[str, Any] = {"phase": str(phase)}
+        for raw, sk in zip(pivot.columns, keys):
+            row[sk] = round(float(pivot.loc[phase, raw]), 2)
+        rows.append(row)
+    colors = {sk: AUTHOR_COLORS.get(str(raw).lower(), "#95A5A6") for raw, sk in zip(pivot.columns, keys)} if column == "author_type" else {}
+    return rows, keys, key_labels, colors
 
 
-def chart_phase_author_mix(phase_auth: pd.DataFrame) -> None:
-    """Stacked bar: who drove each phase — company, media, creators, community."""
-    if phase_auth.empty:
-        return
-
-    pivot = phase_auth.pivot_table(
-        index="phase", columns="author_type", values="pct", aggfunc="sum", fill_value=0
-    )
-    phase_order = [p for p in PHASES.keys() if p in pivot.index]
-    pivot = pivot.reindex(phase_order)
-
-    author_colors = {
-        "company": "#E74C3C",
-        "media": "#E67E22",
-        "creator_blogger": "#3498DB",
-        "developer": "#2ECC71",
-        "community_user": "#9B59B6",
-        "unknown": "#BDC3C7",
-    }
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bottom = np.zeros(len(pivot))
-    cols = [c for c in pivot.columns]
-
-    for col in cols:
-        color = author_colors.get(col, "#95A5A6")
-        ax.bar(pivot.index, pivot[col], bottom=bottom, label=col, color=color)
-        for j, (val, bot) in enumerate(zip(pivot[col], bottom)):
-            if val > 8:
-                ax.text(
-                    j,
-                    bot + val / 2,
-                    f"{val:.0f}%",
-                    ha="center",
-                    va="center",
-                    fontsize=8,
-                    color="white",
-                    fontweight="bold",
-                )
-        bottom += pivot[col].values
-
-    ax.set_title(
-        f"{RELEASE_NAME} — Who Drove Each Phase?\n"
-        f"Author type distribution across the release lifecycle",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.set_xlabel("Release Phase")
-    ax.set_ylabel("% of posts in phase")
-    ax.legend(
-        bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=9, title="Author Type"
-    )
-    ax.set_ylim(0, 110)
-    ax.grid(axis="y", alpha=0.3)
-
-    _save_fig(fig, "bar_release_author_phase.png")
-
-
-def chart_top_posts(top_posts: pd.DataFrame) -> None:
-    """Horizontal bar: top 15 posts by engagement in the launch window."""
-    if top_posts.empty:
-        return
-
-    df = top_posts.head(15).copy()
-
-    # Build label: platform + short title/snippet
-    def _label(row):
-        text = row["title"] if row["title"] else row["text_snippet"]
-        text = str(text)[:65].strip()
-        return f"[{row['source_platform'].upper()}] {text}"
-
-    df["label"] = df.apply(_label, axis=1)
-    df = df.sort_values("engagement")
-
-    fig, ax = plt.subplots(figsize=(13, 7))
-    colors = [PHASE_COLORS.get(p, "#BDC3C7") for p in df["phase"]]
-    bars = ax.barh(df["label"], df["engagement"], color=colors)
-
-    for bar, val in zip(bars, df["engagement"]):
-        ax.text(
-            bar.get_width() + 50,
-            bar.get_y() + bar.get_height() / 2,
-            f"{val:,}",
-            va="center",
-            fontsize=8,
+def _top_posts_payload(top: pd.DataFrame, limit: int = 15) -> list[dict[str, Any]]:
+    if top.empty:
+        return []
+    out: list[dict[str, Any]] = []
+    for _, row in top.head(limit).iterrows():
+        title = str(row["title"]) if "title" in row and row["title"] else ""
+        snip = str(row["text_snippet"]) if "text_snippet" in row and row["text_snippet"] else ""
+        t = title or snip
+        plat = str(row.get("source_platform", "") or "").upper()
+        label = f"[{plat}] {t[:70].strip()}" if plat else t[:70].strip()
+        eng = row.get("engagement")
+        eng_f = float(eng) if eng is not None and not pd.isna(eng) else 0.0
+        phase = str(row.get("phase", "") or "")
+        out.append(
+            {
+                "label": label,
+                "engagement": int(round(eng_f)) if eng_f == eng_f else 0,
+                "phase": phase,
+                "days": int(row["days"]) if not pd.isna(row.get("days")) else None,
+                "url": row.get("url") if pd.notna(row.get("url")) else None,
+                "title": title[:200] if title else None,
+                "source_platform": str(row.get("source_platform", "") or "") or None,
+                "phase_color": PHASE_COLORS.get(phase, "#BDC3C7"),
+            }
         )
-
-    ax.set_title(
-        f"{RELEASE_NAME} — Top Posts by Engagement (days −3 to +14)\n"
-        f"Launch window: highest-impact content",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.set_xlabel("Total Engagement (likes + comments + reposts)")
-    ax.tick_params(axis="y", labelsize=8)
-    ax.grid(axis="x", alpha=0.3)
-
-    # Phase legend
-    handles = [mpatches.Patch(color=c, label=p) for p, c in PHASE_COLORS.items()]
-    ax.legend(handles=handles, loc="lower right", fontsize=8)
-
-    plt.tight_layout()
-    _save_fig(fig, "bar_release_top_posts.png")
+    out.sort(key=lambda r: r["engagement"])
+    return out
 
 
-def chart_phase_summary(phase_vol: pd.DataFrame) -> None:
-    """Bar chart summarizing post volume and median engagement by phase."""
-    df = phase_vol[phase_vol["phase"].isin(PHASES.keys())].copy()
-    if df.empty:
-        return
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
-
-    colors = [PHASE_COLORS.get(p, "#BDC3C7") for p in df["phase"]]
-
-    # Left: post count
-    ax1.bar(df["phase"], df["post_count"], color=colors)
-    for bar, val in zip(ax1.patches, df["post_count"]):
-        ax1.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 0.3,
-            str(val),
-            ha="center",
-            fontsize=10,
-            fontweight="bold",
-        )
-    ax1.set_title("Posts per Phase", fontsize=12, fontweight="bold")
-    ax1.set_ylabel("Post Count")
-    ax1.grid(axis="y", alpha=0.3)
-
-    # Right: median engagement
-    ax2.bar(df["phase"], df["median_engagement"], color=colors)
-    for bar, val in zip(ax2.patches, df["median_engagement"]):
-        ax2.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 0.3,
-            f"{val:.0f}",
-            ha="center",
-            fontsize=10,
-            fontweight="bold",
-        )
-    ax2.set_title("Median Engagement per Phase", fontsize=12, fontweight="bold")
-    ax2.set_ylabel("Median Engagement (likes + comments + reposts)")
-    ax2.grid(axis="y", alpha=0.3)
-
-    fig.suptitle(
-        f"{RELEASE_NAME} Release Lifecycle Summary\n" + " · ".join(RELEASE_HIGHLIGHTS),
-        fontsize=12,
-        fontweight="bold",
-        y=1.02,
-    )
-    plt.tight_layout()
-    _save_fig(fig, "bar_release_phase_summary.png")
-
-
-# ── Master runner ──────────────────────────────────────────────────────────────
-
-
-def run(dataset_path: str | None = None) -> dict:
-    """Run full release timeline analysis. Returns dict of result DataFrames."""
-    path = dataset_path or str(Path(FINAL_DATA_DIR) / "dataset.csv")
-    df_all, df_opus = load_and_prep(path)
-
-    # ── Tables ──────────────────────────────────────────────────────────────────
-    phase_vol = phase_volume_table(df_opus)
-    daily = daily_volume_table(df_opus)
-    phase_cat = phase_category_mix(df_opus)
-    phase_auth = phase_author_mix(df_opus)
-    top_posts = top_posts_launch_window(df_opus)
-
-    _save_table(phase_vol, "release_phase_volume.csv")
-    _save_table(daily, "release_daily_volume.csv")
-    _save_table(phase_cat, "release_content_mix.csv")
-    _save_table(phase_auth, "release_author_type_mix.csv")
-    _save_table(top_posts, "release_top_posts.csv")
-
-    # ── Charts ──────────────────────────────────────────────────────────────────
-    chart_daily_volume(daily)
-    chart_daily_engagement(daily)
-    chart_phase_category_mix(phase_cat)
-    chart_phase_author_mix(phase_auth)
-    chart_top_posts(top_posts)
-    chart_phase_summary(phase_vol)
-
-    # ── Print summary ───────────────────────────────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"RELEASE TIMELINE: {RELEASE_NAME}")
-    print(f"Release date: {RELEASE_DATE.date()}")
-    print(f"{'='*60}")
-    print(f"\n── Posts in scope: {len(df_opus)} (of {len(df_all)} total)")
-    print(f"\n── Phase breakdown:")
-    print(phase_vol.to_string(index=False))
-    print(f"\n── Top posts (launch window):")
-    for _, row in top_posts.head(5).iterrows():
-        title = row["title"] or row["text_snippet"]
-        print(
-            f"  [{row['phase']}] {row['source_platform'].upper()} | eng={row['engagement']:,} | {str(title)[:80]}"
-        )
-    print(f"\n── Charts saved to outputs/charts/")
-    print(f"── Tables saved to outputs/tables/")
-    print(f"{'='*60}\n")
-
+def empty_timeline_payload(model_id: str) -> dict[str, Any]:
+    cfg = MODEL_CONFIG[model_id]
     return {
-        "phase_vol": phase_vol,
-        "daily": daily,
-        "phase_cat": phase_cat,
-        "phase_auth": phase_auth,
-        "top_posts": top_posts,
+        "model_id": model_id,
+        "release_label": cfg["release_label"],
+        "release_date": cfg["release_date"],
+        "x_axis_hint": cfg["x_axis_hint"],
+        "benchmarks": list(cfg["benchmarks"]),
+        "phases": [
+            {"name": n, "lo": PHASE_BOUNDS[n][0], "hi": PHASE_BOUNDS[n][1], "color": PHASE_COLORS[n]}
+            for n in PHASE_ORDER
+        ],
+        "phase_colors": PHASE_COLORS,
+        "daily": [],
+        "phase_summary": [],
+        "category_mix": {"rows": [], "keys": [], "key_labels": {}},
+        "author_mix": {"rows": [], "keys": [], "key_labels": {}, "colors": {}},
+        "top_posts": [],
     }
 
 
-if __name__ == "__main__":
-    import sys
+def build_timeline_payload(dataset_path: Path, model_id: str) -> dict[str, Any]:
+    if model_id not in MODEL_CONFIG:
+        raise ValueError(f"unknown model_id: {model_id}")
+    base = empty_timeline_payload(model_id)
+    if not dataset_path.is_file():
+        return base
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    path = sys.argv[1] if len(sys.argv) > 1 else None
-    run(path)
+    df = _load_scope(dataset_path, model_id)
+    if df.empty:
+        return base
+
+    phase_tbl = _tbl_phase_summary(df)
+    daily = _tbl_daily(df)
+    cat_tbl = _tbl_category_by_phase(df)
+    auth_tbl = _tbl_author_by_phase(df)
+    top = _tbl_top_posts(df)
+
+    phase_only = phase_tbl[phase_tbl["phase"].isin(PHASE_BOUNDS)].copy()
+
+    cat_rows, cat_keys, cat_labels, _ = _stack_mix_rows(
+        cat_tbl, "content_category", PHASE_ORDER, top_n=9
+    )
+    auth_rows, auth_keys, auth_labels, auth_colors = _stack_mix_rows(
+        auth_tbl, "author_type", PHASE_ORDER, top_n=None
+    )
+
+    base["daily"] = _df_records(daily)
+    base["phase_summary"] = _df_records(phase_only)
+    base["category_mix"] = {
+        "rows": cat_rows,
+        "keys": cat_keys,
+        "key_labels": cat_labels,
+    }
+    base["author_mix"] = {
+        "rows": auth_rows,
+        "keys": auth_keys,
+        "key_labels": auth_labels,
+        "colors": auth_colors,
+    }
+    base["top_posts"] = _top_posts_payload(top, limit=15)
+    return base

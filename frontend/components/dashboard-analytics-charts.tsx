@@ -5,7 +5,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Legend,
   Line,
   LineChart,
@@ -18,15 +17,19 @@ import {
   ZAxis,
 } from "recharts";
 import {
-  ACCENT_BARS,
+  CHART_ACCENT_LIME,
   chartAxisLine,
   chartAxisTick,
   chartBarMargin,
-  chartGrid,
+  chartBarRadiusEnd,
+  chartBarRadiusTop,
+  chartBarTooltipCursor,
+  chartCategoryXAxisBottom,
+  chartGridHorizontalBars,
+  chartGridVerticalBars,
   chartTooltipContent,
   chartTooltipLabel,
-  DEFAULT_SERIES_COLOR,
-  PLATFORM_COLORS,
+  MINIMAL_SERIES_PALETTE,
 } from "@/lib/chart-theme";
 
 export type DashboardChartsPayload = {
@@ -86,11 +89,15 @@ function ChartPanel({
     <div
       className={`glass overflow-hidden p-5 ${wide ? "lg:col-span-2" : ""}`}
     >
-      <h2 className="text-sm font-medium tracking-tight text-white">{title}</h2>
+      <h2 className="text-base font-medium tracking-tight text-white">{title}</h2>
       {subtitle ? (
         <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>
       ) : null}
-      <div className={`mt-4 w-full ${h}`}>{children}</div>
+      <div
+        className={`mt-4 w-full rounded-xl border border-white/[0.06] bg-zinc-950/75 p-3 shadow-inner shadow-black/20 ${h}`}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -143,9 +150,15 @@ export function DashboardAnalyticsCharts({
   }
 
   const hasAny =
-    data.platform_volume.length > 0 ||
-    data.platform_engagement.length > 0 ||
-    data.content_categories.length > 0;
+    data.content_categories.length > 0 ||
+    data.category_median_engagement.length > 0 ||
+    data.author_posts.length > 0 ||
+    data.author_engagement_share.length > 0 ||
+    data.narratives.length > 0 ||
+    data.bigrams.length > 0 ||
+    (data.narrative_trend?.length ?? 0) > 0 ||
+    data.scatter_points.length > 0 ||
+    data.query_groups.length > 0;
 
   if (!hasAny) {
     return (
@@ -155,24 +168,6 @@ export function DashboardAnalyticsCharts({
       </p>
     );
   }
-
-  const volData = data.platform_volume.map((r) => ({
-    name: r.platform,
-    value: r.post_count,
-    fill: PLATFORM_COLORS[r.platform] ?? DEFAULT_SERIES_COLOR,
-  }));
-
-  const engTotal = data.platform_engagement.map((r) => ({
-    name: r.platform,
-    value: r.total_engagement,
-    fill: PLATFORM_COLORS[r.platform] ?? DEFAULT_SERIES_COLOR,
-  }));
-
-  const engMed = data.platform_engagement.map((r) => ({
-    name: r.platform,
-    value: r.median_engagement,
-    fill: PLATFORM_COLORS[r.platform] ?? DEFAULT_SERIES_COLOR,
-  }));
 
   const catDist = data.content_categories.map((r) => ({
     label: formatSnake(r.category),
@@ -211,79 +206,6 @@ export function DashboardAnalyticsCharts({
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <ChartPanel
-        title="Post volume by platform"
-        subtitle="Same signal as the landing dashboard — platform-colored bars"
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={volData} margin={chartBarMargin}>
-            <CartesianGrid {...chartGrid} />
-            <XAxis dataKey="name" tick={chartAxisTick} axisLine={chartAxisLine} />
-            <YAxis tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
-            <Tooltip
-              contentStyle={chartTooltipContent}
-              labelStyle={chartTooltipLabel}
-              formatter={(v) => [tipFmt(v as number), "Posts"]}
-            />
-            <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-              {volData.map((e, i) => (
-                <Cell key={`v-${i}`} fill={e.fill} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartPanel>
-
-      <ChartPanel
-        title="Total engagement by platform"
-        subtitle="Logarithmic Y-axis so smaller platforms stay visible next to dominant totals"
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={engTotal} margin={chartBarMargin}>
-            <CartesianGrid {...chartGrid} />
-            <XAxis dataKey="name" tick={chartAxisTick} axisLine={chartAxisLine} />
-            <YAxis
-              scale="log"
-              domain={[1, "auto"]}
-              tick={chartAxisTick}
-              axisLine={chartAxisLine}
-              tickFormatter={tipFmt}
-              allowDataOverflow
-            />
-            <Tooltip
-              contentStyle={chartTooltipContent}
-              labelStyle={chartTooltipLabel}
-              formatter={(v) => [tipFmt(v as number), "Engagement"]}
-            />
-            <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-              {engTotal.map((e, i) => (
-                <Cell key={`t-${i}`} fill={e.fill} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartPanel>
-
-      <ChartPanel title="Median engagement per post by platform">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={engMed} margin={chartBarMargin}>
-            <CartesianGrid {...chartGrid} />
-            <XAxis dataKey="name" tick={chartAxisTick} axisLine={chartAxisLine} />
-            <YAxis tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
-            <Tooltip
-              contentStyle={chartTooltipContent}
-              labelStyle={chartTooltipLabel}
-              formatter={(v) => [tipFmt(v as number), "Median"]}
-            />
-            <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-              {engMed.map((e, i) => (
-                <Cell key={`m-${i}`} fill={e.fill} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartPanel>
-
       <ChartPanel title="Content category distribution" tall>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
@@ -291,7 +213,7 @@ export function DashboardAnalyticsCharts({
             data={catDist}
             margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
           >
-            <CartesianGrid {...chartGrid} />
+            <CartesianGrid {...chartGridHorizontalBars} />
             <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
             <YAxis
               type="category"
@@ -301,11 +223,16 @@ export function DashboardAnalyticsCharts({
               axisLine={chartAxisLine}
             />
             <Tooltip
+              cursor={chartBarTooltipCursor}
               contentStyle={chartTooltipContent}
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Posts"]}
             />
-            <Bar dataKey="value" fill={ACCENT_BARS[0]} radius={[0, 4, 4, 0]} />
+            <Bar
+              dataKey="value"
+              fill={CHART_ACCENT_LIME}
+              radius={[...chartBarRadiusEnd]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -317,7 +244,7 @@ export function DashboardAnalyticsCharts({
             data={catMed}
             margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
           >
-            <CartesianGrid {...chartGrid} />
+            <CartesianGrid {...chartGridHorizontalBars} />
             <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
             <YAxis
               type="category"
@@ -327,11 +254,16 @@ export function DashboardAnalyticsCharts({
               axisLine={chartAxisLine}
             />
             <Tooltip
+              cursor={chartBarTooltipCursor}
               contentStyle={chartTooltipContent}
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Median engagement"]}
             />
-            <Bar dataKey="value" fill={ACCENT_BARS[1]} radius={[0, 4, 4, 0]} />
+            <Bar
+              dataKey="value"
+              fill={CHART_ACCENT_LIME}
+              radius={[...chartBarRadiusEnd]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -340,25 +272,27 @@ export function DashboardAnalyticsCharts({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={authorPosts}
-            margin={{ ...chartBarMargin, bottom: 48 }}
+            margin={{ ...chartBarMargin, bottom: 4 }}
           >
-            <CartesianGrid {...chartGrid} />
+            <CartesianGrid {...chartGridVerticalBars} />
             <XAxis
               dataKey="label"
-              tick={{ ...chartAxisTick, fontSize: 10 }}
+              tick={{ ...chartAxisTick, fontSize: 11 }}
               axisLine={chartAxisLine}
-              interval={0}
-              angle={-28}
-              textAnchor="end"
-              height={56}
+              {...chartCategoryXAxisBottom}
             />
             <YAxis tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
             <Tooltip
+              cursor={chartBarTooltipCursor}
               contentStyle={chartTooltipContent}
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Posts"]}
             />
-            <Bar dataKey="value" fill={ACCENT_BARS[2]} radius={[6, 6, 0, 0]} />
+            <Bar
+              dataKey="value"
+              fill={CHART_ACCENT_LIME}
+              radius={[...chartBarRadiusTop]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -367,25 +301,27 @@ export function DashboardAnalyticsCharts({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={authorPct}
-            margin={{ ...chartBarMargin, bottom: 48 }}
+            margin={{ ...chartBarMargin, bottom: 4 }}
           >
-            <CartesianGrid {...chartGrid} />
+            <CartesianGrid {...chartGridVerticalBars} />
             <XAxis
               dataKey="label"
-              tick={{ ...chartAxisTick, fontSize: 10 }}
+              tick={{ ...chartAxisTick, fontSize: 12 }}
               axisLine={chartAxisLine}
-              interval={0}
-              angle={-28}
-              textAnchor="end"
-              height={56}
+              {...chartCategoryXAxisBottom}
             />
             <YAxis tick={chartAxisTick} axisLine={chartAxisLine} />
             <Tooltip
+              cursor={chartBarTooltipCursor}
               contentStyle={chartTooltipContent}
               labelStyle={chartTooltipLabel}
               formatter={(v) => [`${v}%`, "Share"]}
             />
-            <Bar dataKey="value" fill={ACCENT_BARS[3]} radius={[6, 6, 0, 0]} />
+            <Bar
+              dataKey="value"
+              fill={CHART_ACCENT_LIME}
+              radius={[...chartBarRadiusTop]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -397,7 +333,7 @@ export function DashboardAnalyticsCharts({
             data={narr}
             margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
           >
-            <CartesianGrid {...chartGrid} />
+            <CartesianGrid {...chartGridHorizontalBars} />
             <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
             <YAxis
               type="category"
@@ -405,13 +341,19 @@ export function DashboardAnalyticsCharts({
               width={118}
               tick={{ ...chartAxisTick, fontSize: 10 }}
               axisLine={chartAxisLine}
+              interval={0}
             />
             <Tooltip
+              cursor={chartBarTooltipCursor}
               contentStyle={chartTooltipContent}
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Posts"]}
             />
-            <Bar dataKey="value" fill="#E9FE87" radius={[0, 4, 4, 0]} />
+            <Bar
+              dataKey="value"
+              fill={CHART_ACCENT_LIME}
+              radius={[...chartBarRadiusEnd]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -423,7 +365,7 @@ export function DashboardAnalyticsCharts({
             data={bigrams}
             margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
           >
-            <CartesianGrid {...chartGrid} />
+            <CartesianGrid {...chartGridHorizontalBars} />
             <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
             <YAxis
               type="category"
@@ -431,13 +373,19 @@ export function DashboardAnalyticsCharts({
               width={100}
               tick={{ ...chartAxisTick, fontSize: 10 }}
               axisLine={chartAxisLine}
+              interval={0}
             />
             <Tooltip
+              cursor={chartBarTooltipCursor}
               contentStyle={chartTooltipContent}
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Count"]}
             />
-            <Bar dataKey="value" fill="#E9FE87" radius={[0, 4, 4, 0]} />
+            <Bar
+              dataKey="value"
+              fill={CHART_ACCENT_LIME}
+              radius={[...chartBarRadiusEnd]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>
@@ -451,7 +399,7 @@ export function DashboardAnalyticsCharts({
         >
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trendPivot.series} margin={chartBarMargin}>
-              <CartesianGrid {...chartGrid} />
+              <CartesianGrid {...chartGridVerticalBars} />
               <XAxis dataKey="month" tick={chartAxisTick} axisLine={chartAxisLine} />
               <YAxis tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
               <Tooltip
@@ -467,7 +415,9 @@ export function DashboardAnalyticsCharts({
                   key={k}
                   type="monotone"
                   dataKey={k}
-                  stroke={ACCENT_BARS[i % ACCENT_BARS.length]}
+                  stroke={
+                    MINIMAL_SERIES_PALETTE[i % MINIMAL_SERIES_PALETTE.length]
+                  }
                   strokeWidth={2}
                   dot={false}
                   name={k}
@@ -487,7 +437,7 @@ export function DashboardAnalyticsCharts({
         >
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-              <CartesianGrid {...chartGrid} />
+              <CartesianGrid {...chartGridVerticalBars} />
               <XAxis
                 type="number"
                 dataKey="views"
@@ -519,13 +469,15 @@ export function DashboardAnalyticsCharts({
                 wrapperStyle={{ color: "#a1a1aa", fontSize: 11 }}
                 formatter={(v) => String(v)}
               />
-              {scatterGrouped.map((g) =>
+              {scatterGrouped.map((g, i) =>
                 g.data.length ? (
                   <Scatter
                     key={g.platform}
                     name={g.platform}
                     data={g.data}
-                    fill={PLATFORM_COLORS[g.platform] ?? DEFAULT_SERIES_COLOR}
+                    fill={
+                      MINIMAL_SERIES_PALETTE[i % MINIMAL_SERIES_PALETTE.length]
+                    }
                   />
                 ) : null
               )}
@@ -536,24 +488,26 @@ export function DashboardAnalyticsCharts({
 
       <ChartPanel title="Median engagement by query group">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={qg} margin={{ ...chartBarMargin, bottom: 52 }}>
-            <CartesianGrid {...chartGrid} />
+          <BarChart data={qg} margin={{ ...chartBarMargin, bottom: 4 }}>
+            <CartesianGrid {...chartGridVerticalBars} />
             <XAxis
               dataKey="name"
-              tick={{ ...chartAxisTick, fontSize: 10 }}
+              tick={{ ...chartAxisTick, fontSize: 11 }}
               axisLine={chartAxisLine}
-              interval={0}
-              angle={-32}
-              textAnchor="end"
-              height={60}
+              {...chartCategoryXAxisBottom}
             />
             <YAxis tick={chartAxisTick} axisLine={chartAxisLine} tickFormatter={tipFmt} />
             <Tooltip
+              cursor={chartBarTooltipCursor}
               contentStyle={chartTooltipContent}
               labelStyle={chartTooltipLabel}
               formatter={(v) => [tipFmt(v as number), "Median engagement"]}
             />
-            <Bar dataKey="value" fill="#E9FE87" radius={[6, 6, 0, 0]} />
+            <Bar
+              dataKey="value"
+              fill={CHART_ACCENT_LIME}
+              radius={[...chartBarRadiusTop]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ChartPanel>

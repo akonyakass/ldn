@@ -10,13 +10,14 @@ import {
   YAxis,
 } from "recharts";
 import {
+  CHART_ACCENT_LIME,
   chartAxisLine,
   chartAxisTick,
   chartBarMargin,
-  chartGrid,
+  chartGridVerticalBars,
+  chartBarTooltipCursor,
   chartTooltipContent,
   chartTooltipLabel,
-  DEFAULT_SERIES_COLOR,
 } from "@/lib/chart-theme";
 
 export type DayPostPoint = {
@@ -65,17 +66,17 @@ export function PostsByDayChart({
           <linearGradient id={GRADIENT_ID} x1="0" y1="0" x2="0" y2="1">
             <stop
               offset="0%"
-              stopColor={DEFAULT_SERIES_COLOR}
-              stopOpacity={0.32}
+              stopColor={CHART_ACCENT_LIME}
+              stopOpacity={0.35}
             />
             <stop
               offset="100%"
-              stopColor={DEFAULT_SERIES_COLOR}
+              stopColor={CHART_ACCENT_LIME}
               stopOpacity={0}
             />
           </linearGradient>
         </defs>
-        <CartesianGrid {...chartGrid} />
+        <CartesianGrid {...chartGridVerticalBars} />
         <XAxis dataKey="label" tick={chartAxisTick} axisLine={chartAxisLine} />
         <YAxis
           tick={chartAxisTick}
@@ -83,6 +84,7 @@ export function PostsByDayChart({
           tickFormatter={tipFmt}
         />
         <Tooltip
+          cursor={chartBarTooltipCursor}
           contentStyle={chartTooltipContent}
           labelStyle={chartTooltipLabel}
           labelFormatter={(_, payload) => {
@@ -94,12 +96,12 @@ export function PostsByDayChart({
         <Area
           type="monotone"
           dataKey="count"
-          stroke={DEFAULT_SERIES_COLOR}
+          stroke={CHART_ACCENT_LIME}
           strokeWidth={2}
           fill={`url(#${GRADIENT_ID})`}
           dot={{
             r: 4,
-            fill: DEFAULT_SERIES_COLOR,
+            fill: CHART_ACCENT_LIME,
             stroke: "rgba(0,0,0,0.45)",
             strokeWidth: 2,
           }}

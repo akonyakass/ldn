@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -63,16 +64,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 border-b border-white/10 bg-black/60 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-6">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-white" />
-              <div>
-                <div className="text-sm font-medium uppercase tracking-[0.28em] text-white/70">
-                  ClaudeIntel
-                </div>
-                <div className="text-xs text-white/40">
-                  Growth Intelligence Engine
-                </div>
-              </div>
+            <Link
+              href="/"
+              className="group flex shrink-0 items-center"
+              aria-label="Higgsfield — home"
+            >
+              <Image
+                src="/higgsfield-logo.png"
+                alt="Higgsfield"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-2xl object-cover ring-1 ring-white/10 transition group-hover:ring-white/25"
+                priority
+              />
             </Link>
             <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/60">
               <Link

@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "ClaudeIntel — Growth Intelligence Engine",
+  title: "Higgsfield",
   description:
     "Reverse-engineering Claude's viral growth — discourse intelligence for growth teams",
 };
