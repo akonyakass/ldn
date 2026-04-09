@@ -6,7 +6,7 @@
 A full data pipeline that discovers, collects, normalizes, labels, and analyzes social media discourse about Claude AI — then surfaces actionable growth insights via a FastAPI + Next.js dashboard.
 
 ---
-
+Playbook: https://drive.google.com/file/d/1oK2_ht92gwFP2V8gk4gZdruaSXUq7VEU/view?usp=sharing 
 ## Table of Contents
 
 - [Dataset at a Glance](#dataset-at-a-glance)
